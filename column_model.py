@@ -97,7 +97,7 @@ def simulate_step(params, fRB, fC, L, P, D, i):
 @njit
 def analyze_simulation(data):
 
-    # Unpack the data from the simulation, filter the data to remove points before t = 5
+    # Unpack the data from the simulation, filter the data to remove points before t=5
     (L, P, D) = data
     L = L[int(5 / STEP):]
     P = P[int(5 / STEP):]
@@ -188,7 +188,7 @@ def fit_model(intracellular_params, cell_type="trichoblast", modified=False):
 
     # Set parameter bounds
     bounds = [
-        (5, 15),     # m
+        (5, 25),     # m
         (0, 1),      # g0
         (0, 10),     # g1
         (15, 25),    # d0
