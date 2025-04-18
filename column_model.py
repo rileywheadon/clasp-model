@@ -21,7 +21,6 @@ VT = np.arange(0, MAX_TIME + STEP, STEP)
 # Sensible defaults for matplotlib
 plt.rcParams['figure.dpi'] = 360
 plt.rcParams['font.size'] = 20
-plt.rcParams['figure.figsize'] = (12, 8)
 
 
 # Creates the CLASP and bound BRI1 receptor functions for the model given parameters
@@ -255,7 +254,7 @@ def plot_mutant_fit(model, data, se, label, color):
 
 # Plot the fit of the models to the data
 def plot_model_fit(models, datasets, errors, file_prefix):
-    mpl.rcParams['figure.figsize'] = (10, 8)
+    plt.rcParams['figure.figsize'] = (10, 8)
 
     # Create a scatterplot
     ax = plt.subplot(111)
@@ -308,10 +307,10 @@ def filter_raw_data(data):
 
 # Plot the division zone
 def plot_column_profile(raws, file_prefix):
-    
-    WT, BC, C1 = raws
-    
+    plt.rcParams['figure.figsize'] = (10, 15)
+
     # Get the division zone sizes and root sizes
+    WT, BC, C1 = raws
     wt_div, wt_size = find_last_division(WT)
     bc_div, bc_size = find_last_division(BC)
     c1_div, c1_size = find_last_division(C1)
@@ -320,8 +319,6 @@ def plot_column_profile(raws, file_prefix):
     WT = filter_raw_data(WT)
     BC = filter_raw_data(BC)
     C1 = filter_raw_data(C1)
-
-    mpl.rcParams['figure.figsize'] = (10, 15)
     
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, layout="constrained")
     ax1.set_xlim((5, 7))
@@ -367,10 +364,10 @@ def get_divisions(data, params):
 
 # Plot the division locations
 def plot_division_histogram(raws, params, file_prefix):
-    WT, BC, C1 = raws
-    mpl.rcParams['figure.figsize'] = (10, 12)
+    plt.rcParams['figure.figsize'] = (10, 12)
     
     # Get the divisions for each mutant
+    WT, BC, C1 = raws
     wt_divs = get_divisions(WT, params)
     bc_divs = get_divisions(BC, params)
     c1_divs = get_divisions(C1, params)
