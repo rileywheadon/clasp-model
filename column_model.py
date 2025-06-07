@@ -224,6 +224,8 @@ def fit_model(intracellular_params, cell_type="trichoblast", modified=False):
 
     m, g0, g1, d0, d1, d2 = fit.x
 
+    # NOTE: Parameters for original: [13.77, 0.5247, 4.630, 21.26, 0.2078, 0.0]
+
     # Log the simulation
     print("Success: ", fit.success, fit.message)
     print(f"Params: {m:.3e}, {g0:.3e}, {g1:.3e}, {d0:.3e}, {d1:.3e}, {d2:.3e}")
@@ -234,6 +236,7 @@ def fit_model(intracellular_params, cell_type="trichoblast", modified=False):
     plot_model_fit(models, DATASETS, ERRORS, file_prefix)
     plot_column_profile(raws, file_prefix)
     plot_division_histogram(raws, fit.x, file_prefix)
+
 
 
 ######################################################
@@ -251,10 +254,11 @@ def plot_mutant_fit(model, data, se, label, color):
 
     # Plot the experimental results
     plt.scatter(ps, data, alpha = 1, zorder = 3, color = color, label = label)
+    plt.fill_between(ps, data - se, data + se, color = color, alpha = 0.15)
 
 # Plot the fit of the models to the data
 def plot_model_fit(models, datasets, errors, file_prefix):
-    plt.rcParams['figure.figsize'] = (10, 8)
+    plt.figure(figsize = (10, 8))
 
     # Create a scatterplot
     ax = plt.subplot(111)
@@ -307,7 +311,7 @@ def filter_raw_data(data):
 
 # Plot the division zone
 def plot_column_profile(raws, file_prefix):
-    plt.rcParams['figure.figsize'] = (10, 15)
+    plt.figure(figsize = (10, 15))
 
     # Get the division zone sizes and root sizes
     WT, BC, C1 = raws
@@ -364,7 +368,7 @@ def get_divisions(data, params):
 
 # Plot the division locations
 def plot_division_histogram(raws, params, file_prefix):
-    plt.rcParams['figure.figsize'] = (10, 12)
+    plt.figure(figsize = (10, 15))
     
     # Get the divisions for each mutant
     WT, BC, C1 = raws
