@@ -46,11 +46,12 @@ def get_bes1_data():
     data = pd.read_csv(f"data/bes1.csv").to_numpy()
     data = data[data[:, 0].argsort()]
 
-    # Bound data between 0um and 1000um
+    # Bound data between 0um and 500um
     data = data[data[:, 0] > 0]
-    data = data[data[:, 0] < 1000]
+    data = data[data[:, 0] < 500]
 
     # Normalize data to a maximum of 1
+    data[:, 0] = data[:, 0] / 1000
     data[:, 1] = data[:, 1] / np.max(data[:, 1])
     return data
 
