@@ -23,12 +23,30 @@ plt.rcParams['figure.dpi'] = 360
 plt.rcParams['font.size'] = 20
 
 
-# Creates the CLASP and bound BRI1 receptor functions for the model given parameters
-def setup(params, mutant):
+# Compute the bound BRI1 receptors using model Hill (2)
+# - z is a position
+# - params is a list of parameters
 
-    # Define parameters and variables
-    a0, a1, b0, b1, kd = params
-    C, RT, RB, B, P = symbols('C RT RB B P')
+@njit
+def bound_receptors(z, params):
+    z = z / 1000
+    (phi, psi, a0, a1, a2) = params
+    Bz = a0 + (a1 * z**2 / (1 + a2**2 * z**2))
+    discriminant = np.sqrt((phi + psi + Bz)**2 - (4 * phi * Bz))
+    return ((phi + psi + Bz) - discriminant) / 2
+
+
+# Creates the CLASP and bound BRI1 receptor functions for the model given parameters
+def setup(params, mutant, kd = 10):
+    (phi, psi, a0, a1, a2) = params
+
+    # Define a0, a1
+    a0 = 62 * 0.65
+    a1 = 62 * 0.35
+
+    # Determine b0, b1
+    b1 = (kd / (a1 * psi)) - (1 / a1)
+    b0 = (phi * ((a1 * b1) + 1) - a0) / a1
             
     # Override parameter values based on mutant
     if mutant == "BRIN-CLASP":
@@ -37,17 +55,12 @@ def setup(params, mutant):
         b0 = 0
         b1 = 0
 
-    # NOTE: This system uses a linear BL function
-    system = [
-        b0 - b1 * RB - C,
-        62 * (0.65 + 0.35 * C) - RT,
-        (1/2) * ((B + RT + kd) - sqrt((B + RT + kd)**2 - 4 * RT * B)) - RB,
-        a0 + ((1 - a0) * P / 1000) - B
-    ]
+    # Create functions for computing CLASP and RB
+    fRB = njit(lambda z: bound_receptors(z, params))
+    fC = njit(lambda z: b0 - (b1 * fRB(z)))
 
-    # Compute the steady states, then return only the CLASP and RB functions
-    steady_states = solve(system, [C, RT, RB, B], dict = True)[-1]
-    return [njit(lambdify(P, steady_states[C])), njit(lambdify(P, steady_states[RB]))]
+    # Return the CLASP and RB functions
+    return [fRB, fC]
 
 
 # Simulate one time step of the cell column model
@@ -57,9 +70,10 @@ def simulate_step(params, fRB, fC, L, P, D, i):
     # Unpack the parameters, create lambda functions
     n = 10
     m, g0, g1, d0, d1, d2 = params
-    dL = lambda l, p: ((g0 + g1 * fRB(p)) * l) * STEP
+
+    dL = lambda l, z: ((g0 + g1 * fRB(z)) * l) * STEP
     hill = lambda l : (l ** n) / ((d0 ** n) + (l ** n))
-    dD = lambda l, p: (1 + d1 * fC(p) - d2 * fC(p) ** 2) * (1 - hill(l)) * STEP
+    dD = lambda l, z: (1 + d1 * fC(z) - d2 * fC(z) ** 2) * (1 - hill(l)) * STEP
     
     # Unpack the data from the previous and current row
     L0, P0, D0 = L[i-1, :], P[i-1, :], D[i-1, :]
@@ -155,9 +169,9 @@ def simulate_mutants(params, fWTRB, fWTC, fBCRB, fBCC, fC1RB, fC1C, datasets):
     wt_data, bc_data, c1_data = datasets
 
     # Simulate each of the mutants individually and compute their error from observations
-    wt_raw, wt_model, wt_rmse = simulate_root(params, fWTC, fWTRB, wt_data)
-    bc_raw, bc_model, bc_rmse = simulate_root(params, fBCC, fBCRB, bc_data)
-    c1_raw, c1_model, c1_rmse = simulate_root(params, fC1C, fC1RB, c1_data)
+    wt_raw, wt_model, wt_rmse = simulate_root(params, fWTRB, fWTC, wt_data)
+    bc_raw, bc_model, bc_rmse = simulate_root(params, fBCRB, fBCC, bc_data)
+    c1_raw, c1_model, c1_rmse = simulate_root(params, fC1RB, fC1C, c1_data)
 
     # Compute the rmse and package up the model results
     rmse = wt_rmse + bc_rmse + c1_rmse
@@ -190,7 +204,7 @@ def fit_model(intracellular_params, cell_type="trichoblast", modified=False):
         (5, 25),     # m
         (0, 1),      # g0
         (0, 10),     # g1
-        (15, 25),    # d0
+        (10, 30),    # d0
         (0, 3),      # d1
         (0, d2_max)  # d2
     ]

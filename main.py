@@ -3,6 +3,7 @@ import exploratory_analysis as ea
 import intracellular_model as im
 import column_model as cm
 
+
 def main():
 
     # Exploratory data analysis on trichoblast data
@@ -19,6 +20,9 @@ def main():
     bl_models = im.intracellular_model()
     im.plot_bl_functions(bl_models)
     im.plot_intracellular_signalling(bl_models, "Hill (2)")
+
+    # Get the parameters from the intracellular model
+    intracellular_params = bl_models["Full"]["Wild Type"]["params"]
 
     # Run the unmodified cell column model
     # print("\nRunning unmodified cell column model. This may take a while.")

@@ -5,6 +5,7 @@ import numpy as np
 from sympy import symbols, sqrt, solve, lambdify
 from scipy.optimize import minimize, direct
 from modules import *
+from numba import njit
 
 # Sensible defaults for matplotlib
 mpl.rcParams['figure.dpi'] = 360
@@ -14,6 +15,7 @@ mpl.rcParams['font.size'] = 18
 data = get_bes1_data()
 Z = data[:, 0]
 BES1 = data[:, 1]
+KD = 15
 
 # Define candidate BL functions
 # - a0, a1, etc. are parameters for the function
@@ -46,7 +48,7 @@ def bound_receptors(bl_function, phi, psi, *bl_params):
 # Fit a BL model to the data
 #  - initial_params is a list of initial parameters to the model
 #  - bl_function is the BL function being fitted
-def fit_model(initial_params, bl_function, data = BES1, kd = 10):
+def fit_model(initial_params, bl_function, data = BES1):
 
     # Ensure that phi >= 0 and psi is strictly postive. 
     epsilon = np.finfo(float).eps
@@ -55,28 +57,31 @@ def fit_model(initial_params, bl_function, data = BES1, kd = 10):
     # Ensure that all parameters for the BL model are >= 0
     bounds += [(0, None)] * (len(initial_params) - 2)
 
+    # Define the error function
     def RSS(params):
 
-        # Compute error from data 
+        # Compute error from BES1 data 
         phi, psi, *bl_params = params
         predicted_bes1 = bound_receptors(bl_function, phi, psi, *bl_params)
         error_bes1 = np.sum((predicted_bes1 - data) ** 2)
 
-        # Determine b0, b1
-        a1 = 62 * 0.35
+        # Set a0, a1
         a0 = 62 * 0.65
-        b1 = (kd / (a1 * psi)) - (1 / a1)
+        a1 = 62 * 0.35
+
+        # Determine b0, b1
+        b1 = (KD / (a1 * psi)) - (1 / a1)
         b0 = (phi * ((a1 * b1) + 1) - a0) / a1
 
         # Compute CLASP and RT 
-        predicted_clasp = b0 + (b1 * predicted_bes1)
+        predicted_clasp = b0 - (b1 * predicted_bes1)
         predicted_rt = a0 + (a1 * predicted_clasp)
 
-        # Compute error from mean RT of 62
-        error_rt = np.sum(((np.mean(predicted_rt) - 62) / 62) ** 2)
+        # Compute error from mean CLASP of 1
+        error_clasp = 1000 * ((np.mean(predicted_clasp) - 1) ** 2)
 
         # Return the sum of the errors
-        return error_bes1 + error_rt
+        return error_bes1 + error_clasp
 
     fit = minimize(RSS, initial_params, bounds=bounds, method='L-BFGS-B')
     return fit.x, fit.fun, fit.success
@@ -150,16 +155,17 @@ def bootstrap_CI(initial_params, bl_function, n_bootstrap = 10, alpha = 0.05):
 #  - params is a tuple (phi, psi, ...)
 #  - mutant is a string ("Wild Type", "BRIN-CLASP", or "CLASP-1")
 #  - kd is the dissociation constant (10nmol/L by default)
-def simulate(bl_function, params, mutant, kd = 10):
+def simulate(bl_function, params, mutant):
 
     # Unpack the parameters and compute the bound receptors
     phi, psi, *bl_params = params
-    vRB = bound_receptors(bl_function, phi, psi, *bl_params)
+
+    # Set a0, a1
+    a0 = 62 * 0.65
+    a1 = 62 * 0.35
 
     # Determine b0, b1
-    a1 = 62 * 0.35
-    a0 = 62 * 0.65
-    b1 = (kd / (a1 * psi)) - (1 / a1)
+    b1 = (KD / (a1 * psi)) - (1 / a1)
     b0 = (phi * ((a1 * b1) + 1) - a0) / a1
 
     # Override parameter values if simulating a mutant
@@ -170,8 +176,13 @@ def simulate(bl_function, params, mutant, kd = 10):
         b0 = 0
         b1 = 0
 
-    # Compute CLASP and RT 
-    vC = b0 + (b1 * vRB)
+    # Update phi and psi with modified b0, b1
+    phi = (a0 + (a1 * b0)) / ((a1 * b1) + 1)
+    psi = KD / ((a1 * b1) + 1)
+
+    # Compute RB, CLASP and RT 
+    vRB = bound_receptors(bl_function, phi, psi, *bl_params)
+    vC = b0 - (b1 * vRB)
     vRT = a0 + (a1 * vC)
 
     return {"c": vC, "rt": vRT, "rb": vRB, "params": params}
@@ -338,7 +349,7 @@ def plot_intracellular_signalling(bl_models, name):
     # Plot the intracellular signalling model for all three mutants
     datasets = [model['Wild Type'], model['BRIN-CLASP'], model['CLASP-1']]
     labels = ['Wild Type', 'BRIN-CLASP', 'CLASP-1']
-    colors = [OKABE_ITO[i] for i in [1, 2, 3]]
+    colors = OKABE_ITO[:3]
 
     for data, label, color in zip(datasets, labels, colors):
         (vC, vRT, vRB, params) = data.values()
