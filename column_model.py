@@ -8,6 +8,9 @@ from sympy import symbols, sqrt, solve, lambdify
 from scipy.optimize import minimize, direct
 from modules import *
 
+# Import intracellular model
+import intracellular_model as im
+
 
 # Define additional configuration information for the simulation
 STEP = 0.002
@@ -27,40 +30,40 @@ plt.rcParams['font.size'] = 20
 # - z is a position
 # - params is a list of parameters
 
-@njit
-def bound_receptors(z, params):
-    z = z / 1000
-    (phi, psi, a0, a1, a2) = params
-    Bz = a0 + (a1 * z**2 / (1 + a2**2 * z**2))
-    discriminant = np.sqrt((phi + psi + Bz)**2 - (4 * phi * Bz))
-    return ((phi + psi + Bz) - discriminant) / 2
+# @njit
+# def bound_receptors(z, params):
+#     z = z / 1000
+#     (phi, psi, a0, a1, a2) = params
+#     Bz = a0 + (a1 * z**2 / (1 + a2**2 * z**2))
+#     discriminant = np.sqrt((phi + psi + Bz)**2 - (4 * phi * Bz))
+#     return ((phi + psi + Bz) - discriminant) / 2
 
 
 # Creates the CLASP and bound BRI1 receptor functions for the model given parameters
-def setup(params, mutant, kd = 10):
-    (phi, psi, a0, a1, a2) = params
+# def setup(params, mutant, kd = 10):
+#     (phi, psi, a0, a1, a2) = params
 
-    # Define a0, a1
-    a0 = 62 * 0.65
-    a1 = 62 * 0.35
+#     # Define a0, a1
+#     a0 = 62 * 0.65
+#     a1 = 62 * 0.35
 
-    # Determine b0, b1
-    b1 = (kd / (a1 * psi)) - (1 / a1)
-    b0 = (phi * ((a1 * b1) + 1) - a0) / a1
+#     # Determine b0, b1
+#     b1 = (kd / (a1 * psi)) - (1 / a1)
+#     b0 = (phi * ((a1 * b1) + 1) - a0) / a1
             
-    # Override parameter values based on mutant
-    if mutant == "BRIN-CLASP":
-        b1 = 0
-    if mutant == "CLASP-1":
-        b0 = 0
-        b1 = 0
+#     # Override parameter values based on mutant
+#     if mutant == "BRIN-CLASP":
+#         b1 = 0
+#     if mutant == "CLASP-1":
+#         b0 = 0
+#         b1 = 0
 
-    # Create functions for computing CLASP and RB
-    fRB = njit(lambda z: bound_receptors(z, params))
-    fC = njit(lambda z: b0 - (b1 * fRB(z)))
+#     # Create functions for computing CLASP and RB
+#     fRB = njit(lambda z: bound_receptors(z, params))
+#     fC = njit(lambda z: b0 - (b1 * fRB(z)))
 
-    # Return the CLASP and RB functions
-    return [fRB, fC]
+#     # Return the CLASP and RB functions
+#     return [fRB, fC]
 
 
 # Simulate one time step of the cell column model
@@ -162,16 +165,28 @@ def simulate_root(params, fRB, fC, observed):
 
 
 # Run a simulation of all three mutants given a set of parameters
-@njit
-def simulate_mutants(params, fWTRB, fWTC, fBCRB, fBCC, fC1RB, fC1C, datasets):
+# @njit
+def simulate_mutants(params, datasets):
+
+    # Get the b1 parameter and set the bl function
+    fBL = im.bl_hill2
+    b1 = params[0]
+
+    # Fit the intracellular signalling model with Hill (2) BL
+    im_params, rss, success = im.fit_model([1, 1, 1, 1, 1, 1], fBL, b1 = b1)
+
+    # Get the RB and CLASP functions
+    fWTRB, fWTC, fWTRT = im.get_functions(fBL, im_params, "Wild Type", b1 = b1)
+    fBCRB, fBCC, fBCRT = im.get_functions(fBL, im_params, "BRIN-CLASP", b1 = b1)
+    fC1RB, fC1C, fC1RT = im.get_functions(fBL, im_params, "CLASP-1", b1 = b1)
 
     # Unpack the datasets array
     wt_data, bc_data, c1_data = datasets
 
     # Simulate each of the mutants individually and compute their error from observations
-    wt_raw, wt_model, wt_rmse = simulate_root(params, fWTRB, fWTC, wt_data)
-    bc_raw, bc_model, bc_rmse = simulate_root(params, fBCRB, fBCC, bc_data)
-    c1_raw, c1_model, c1_rmse = simulate_root(params, fC1RB, fC1C, c1_data)
+    wt_raw, wt_model, wt_rmse = simulate_root(params[1:], fWTRB, fWTC, wt_data)
+    bc_raw, bc_model, bc_rmse = simulate_root(params[1:], fBCRB, fBCC, bc_data)
+    c1_raw, c1_model, c1_rmse = simulate_root(params[1:], fC1RB, fC1C, c1_data)
 
     # Compute the rmse and package up the model results
     rmse = wt_rmse + bc_rmse + c1_rmse
@@ -181,12 +196,12 @@ def simulate_mutants(params, fWTRB, fWTC, fBCRB, fBCC, fC1RB, fC1C, datasets):
 
 
 # Fit the model given intracellular_params and the cell_type
-def fit_model(intracellular_params, cell_type="trichoblast", modified=False):
+def fit_model(cell_type="trichoblast", modified=False):
 
     # Unpack the setup tuples to get the intracellular functions
-    fWTRB, fWTC = setup(intracellular_params, "Wild Type")
-    fBCRB, fBCC = setup(intracellular_params, "BRIN-CLASP")
-    fC1RB, fC1C = setup(intracellular_params, "CLASP-1")
+    # fWTRB, fWTC = setup(intracellular_params, "Wild Type")
+    # fBCRB, fBCC = setup(intracellular_params, "BRIN-CLASP")
+    # fC1RB, fC1C = setup(intracellular_params, "CLASP-1")
 
     # Get the binned experimental data
     DATASETS, ERRORS = [], []
@@ -201,6 +216,7 @@ def fit_model(intracellular_params, cell_type="trichoblast", modified=False):
 
     # Set parameter bounds
     bounds = [
+        (0, 1.5),    # b1
         (5, 25),     # m
         (0, 1),      # g0
         (0, 10),     # g1
@@ -212,12 +228,12 @@ def fit_model(intracellular_params, cell_type="trichoblast", modified=False):
     # Define the cost function
     cost = lambda params : simulate_mutants(
         params,
-        fWTRB,
-        fWTC,
-        fBCRB,
-        fBCC,
-        fC1RB,
-        fC1C,
+        # fWTRB,
+        # fWTC,
+        # fBCRB,
+        # fBCC,
+        # fC1RB,
+        # fC1C,
         DATASETS
     )[-1]
 
@@ -227,22 +243,22 @@ def fit_model(intracellular_params, cell_type="trichoblast", modified=False):
     # Run a simulation with the optimal parameters
     raws, models, rmse = simulate_mutants(
         fit.x,
-        fWTRB,
-        fWTC,
-        fBCRB,
-        fBCC,
-        fC1RB,
-        fC1C,
+        # fWTRB,
+        # fWTC,
+        # fBCRB,
+        # fBCC,
+        # fC1RB,
+        # fC1C,
         DATASETS
     )
 
-    m, g0, g1, d0, d1, d2 = fit.x
+    b1, m, g0, g1, d0, d1, d2 = fit.x
 
     # NOTE: Parameters for original: [13.77, 0.5247, 4.630, 21.26, 0.2078, 0.0]
 
     # Log the simulation
     print("Success: ", fit.success, fit.message)
-    print(f"Params: {m:.3e}, {g0:.3e}, {g1:.3e}, {d0:.3e}, {d1:.3e}, {d2:.3e}")
+    print(f"Params: {b1:.3e} {m:.3e}, {g0:.3e}, {g1:.3e}, {d0:.3e}, {d1:.3e}, {d2:.3e}")
     print("Error: ", rmse)
 
     # Generate the visualizations

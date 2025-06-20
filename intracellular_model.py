@@ -15,32 +15,49 @@ mpl.rcParams['font.size'] = 18
 data = get_bes1_data()
 Z = data[:, 0]
 BES1 = data[:, 1]
-KD = 15
 
-# Define candidate BL functions
-# - a0, a1, etc. are parameters for the function
-def bl_linear(a0, a1):
-    return a0 + a1 * Z 
+# Set intracellular constants KD, B1, A0, A1
+KD = 10
+B1 = 1.5
+A0 = 62 * 0.65
+A1 = 62 * 0.35
 
-def bl_hill1(a0, a1, a2):
-    return a0 + a1 * Z / (1 + a2 * Z)
+# Define BL functions
+@njit
+def bl_linear(z, params):
+    c0, c1, n2, n3, n4 = params
+    return c0 + c1 * z
 
-def bl_hill2(a0, a1, a2):
-    term = a1 * Z**2 / (1 + a2**2 * Z**2)
-    return a0 + term
+@njit
+def bl_hill1(z, params):
+    c0, c1, c2, n3, n4  = params 
+    return c0 + c1 * z / (1 + c2 * z)
 
-def bl_full(a0, a1, a2, a3, a4):
-    term1 = a1 * Z / (1 + a2 * Z)
-    term2 = a3 * Z**2 / (1 + a4**2 * Z**2)
-    return a0 + term1 + term2
+@njit
+def bl_hill2(z, params):
+    c0, c1, c2, n3, n4  = params 
+    return c0 + (c1 * z**2 / (1 + c2**2 * z**2))
+
+@njit
+def bl_full(z, params):
+    c0, c1, c2, c3, c4 = params 
+    term1 = c1 * z / (1 + c2 * z)
+    term2 = c3 * z**2 / (1 + c4**2 * z**2)
+    return c0 + term1 + term2
 
 
-# Compute the bound BRI1 receptors
-# - bl_function is one of the candidate BL functions
-# - phi, psi are intracellular signalling parameters
-# - bl_params are parameters for the candidate BL function
-def bound_receptors(bl_function, phi, psi, *bl_params):
-    Bz = bl_function(*bl_params)
+# Define RB function
+@njit
+def bound_receptors(z, bl_function, b0, b1, params):
+
+    # Get the Bz curve
+    Bz = bl_function(z, params)
+
+    # Compute phi and psi (intermediate parameters)
+    phi = (A0 + (A1 * b0)) / (1 + (A1 * b1))
+    psi = KD / (1 + (A1 * b1))
+
+    # Compute the discriminant and RB using mass balance
     discriminant = np.sqrt((phi + psi + Bz)**2 - (4 * phi * Bz))
     return ((phi + psi + Bz) - discriminant) / 2
 
@@ -48,37 +65,25 @@ def bound_receptors(bl_function, phi, psi, *bl_params):
 # Fit a BL model to the data
 #  - initial_params is a list of initial parameters to the model
 #  - bl_function is the BL function being fitted
-def fit_model(initial_params, bl_function, data = BES1):
+def fit_model(initial_params, bl_function, data = BES1, b1 = B1):
 
-    # Ensure that phi >= 0 and psi is strictly postive. 
-    epsilon = np.finfo(float).eps
-    bounds = [(0, None), (epsilon, None)]  
-
-    # Ensure that all parameters for the BL model are >= 0
-    bounds += [(0, None)] * (len(initial_params) - 2)
+    # Ensure that all parameters are non-negative
+    bounds = [(0, None)] * 6
 
     # Define the error function
     def RSS(params):
 
         # Compute error from BES1 data 
-        phi, psi, *bl_params = params
-        predicted_bes1 = bound_receptors(bl_function, phi, psi, *bl_params)
+        b0, *bl_params = params
+        predicted_bes1 = bound_receptors(Z, bl_function, b0, b1, bl_params)
         error_bes1 = np.sum((predicted_bes1 - data) ** 2)
-
-        # Set a0, a1
-        a0 = 62 * 0.65
-        a1 = 62 * 0.35
-
-        # Determine b0, b1
-        b1 = (KD / (a1 * psi)) - (1 / a1)
-        b0 = (phi * ((a1 * b1) + 1) - a0) / a1
 
         # Compute CLASP and RT 
         predicted_clasp = b0 - (b1 * predicted_bes1)
-        predicted_rt = a0 + (a1 * predicted_clasp)
+        predicted_rt = A0 + (A1 * predicted_clasp)
 
         # Compute error from mean CLASP of 1
-        error_clasp = 1000 * ((np.mean(predicted_clasp) - 1) ** 2)
+        error_clasp = len(data) * ((np.mean(predicted_clasp) - 1) ** 2)
 
         # Return the sum of the errors
         return error_bes1 + error_clasp
@@ -102,14 +107,14 @@ def AICc(rss, n, k):
 #  - bl_function is the BL function being fitted
 #  - n_bootstrap is the number of bootstrap simulations (default: 1000)
 #  - alpha is the significance level for the confidence interval (default: 0.05)
-def bootstrap_CI(initial_params, bl_function, n_bootstrap = 10, alpha = 0.05):
+def bootstrap_CI(initial_params, bl_function, n_bootstrap = 10, alpha = 0.05, b1 = B1):
 
     # Fit to original data
     best_params, rss, success = fit_model(initial_params, bl_function)
 
     # Get the best paramers and the residuals
-    phi, psi, *best_bl_params = best_params
-    residuals = BES1 - bound_receptors(bl_function, phi, psi, *best_bl_params)
+    b0, *best_bl_params = best_params
+    residuals = BES1 - bound_receptors(Z, bl_function, b0, b1, best_bl_params)
     bootstrap_estimates = np.zeros((n_bootstrap, len(initial_params)))
 
     for i in range(n_bootstrap):
@@ -122,10 +127,11 @@ def bootstrap_CI(initial_params, bl_function, n_bootstrap = 10, alpha = 0.05):
         )
 
         y_bootstrap = bound_receptors(
+            Z,
             bl_function,
-            phi,
-            psi,
-            *best_bl_params
+            b0,
+            b1,
+            best_bl_params
         ) + resampled_residuals
 
         try:
@@ -150,42 +156,29 @@ def bootstrap_CI(initial_params, bl_function, n_bootstrap = 10, alpha = 0.05):
 
 
 
-# Compute CLASP and RT from a fittted model
-#  - bl_function is a B(z) function
-#  - params is a tuple (phi, psi, ...)
+# Generate RB, CLASP, and RT functions from a fittted model
+#  - bl_function is the nam eof a B(z) form
+#  - params is a tuple of parameters
 #  - mutant is a string ("Wild Type", "BRIN-CLASP", or "CLASP-1")
-#  - kd is the dissociation constant (10nmol/L by default)
-def simulate(bl_function, params, mutant):
+def get_functions(bl_function, params, mutant, b1 = B1):
 
     # Unpack the parameters and compute the bound receptors
-    phi, psi, *bl_params = params
-
-    # Set a0, a1
-    a0 = 62 * 0.65
-    a1 = 62 * 0.35
-
-    # Determine b0, b1
-    b1 = (KD / (a1 * psi)) - (1 / a1)
-    b0 = (phi * ((a1 * b1) + 1) - a0) / a1
+    b0 = params[0]
+    bl_params = params[1:]
 
     # Override parameter values if simulating a mutant
     if mutant == "BRIN-CLASP":
         b1 = 0
-
-    if mutant == "CLASP-1":
+    elif mutant == "CLASP-1":
         b0 = 0
         b1 = 0
 
-    # Update phi and psi with modified b0, b1
-    phi = (a0 + (a1 * b0)) / ((a1 * b1) + 1)
-    psi = KD / ((a1 * b1) + 1)
-
     # Compute RB, CLASP and RT 
-    vRB = bound_receptors(bl_function, phi, psi, *bl_params)
-    vC = b0 - (b1 * vRB)
-    vRT = a0 + (a1 * vC)
+    fRB = njit(lambda z : bound_receptors(z / 1000, bl_function, b0, b1, bl_params))
+    fC = njit(lambda z : b0 - (b1 * fRB(z)))
+    fRT = njit(lambda z : A0 + (A1 * fC(z)))
 
-    return {"c": vC, "rt": vRT, "rb": vRB, "params": params}
+    return [fRB, fC, fRT]
 
 
 # Run the intracellular model
@@ -195,27 +188,27 @@ def intracellular_model():
     bl_models = {
         'Linear': {
             'function': bl_linear,
-            'initial_params': [10, 5, 1, 1],
-            'param_names': ['phi', 'psi', 'a0', 'a1'],
-            'k': 4
+            'initial_params': [1, 1, 1, 1, 1, 1],
+            'param_names': ['b0', 'c0', 'c1'],
+            'k': 3
         },
         'Hill (1)': {
             'function': bl_hill1,
-            'initial_params': [10, 5, 1, 1, 1],
-            'param_names': ['phi', 'psi', 'a0', 'a1', 'a2'],
-            'k': 5
+            'initial_params': [1, 1, 1, 1, 1, 1],
+            'param_names': ['b0', 'c0', 'c1', 'c2'],
+            'k': 4
         },
         'Hill (2)': {
             'function': bl_hill2,
-            'initial_params': [10, 5, 1, 1, 1],
-            'param_names': ['phi', 'psi', 'a0', 'a1', 'a2'],
-            'k': 5
+            'initial_params': [1, 1, 1, 1, 1, 1],
+            'param_names': ['b0', 'c0', 'c1', 'c2'],
+            'k': 4
         },
         'Full': {
             'function': bl_full,
-            'initial_params': [10, 5, 1, 1, 1, 1, 1],
-            'param_names': ['phi', 'psi', 'a0', 'a1', 'a2', 'a3', 'a4'],
-            'k': 7
+            'initial_params': [1, 1, 1, 1, 1, 1],
+            'param_names': ['b0', 'c0', 'c1', 'c2', 'c3'],
+            'k': 6
         },
     }
 
@@ -241,27 +234,11 @@ def intracellular_model():
         # Add the model to bl_models list
         bl_models[name]['best_params'] = best_fit
 
-        # Run simulations on all mutants and add the results to the bl_models list
-        bl_models[name]['Wild Type'] = simulate(
-            model['function'],
-            best_fit,
-            'Wild Type'
-        )
-
-        bl_models[name]['BRIN-CLASP'] = simulate(
-            model['function'],
-            best_fit,
-            'BRIN-CLASP'
-        )
-        
-        bl_models[name]['CLASP-1'] = simulate(
-            model['function'],
-            best_fit,
-            'CLASP-1'
-        )
+        # Get RB, CLASP, and RB functions for all mutants and add them to bl_models
+        for mutant in ['Wild Type', 'BRIN-CLASP', 'CLASP-1']:
+            bl_models[name][mutant] = get_functions(model['function'], best_fit, mutant)
 
     return bl_models
-
 
 # Uncomment for testing.
 # intracellular_model()
@@ -275,11 +252,11 @@ def intracellular_model():
 # - bl_models is the list of models returned by intracellular_model()
 def plot_bl_functions(bl_models):
 
-    # Get the RB curves for each distribution
-    rb_linear = bl_models['Linear']['Wild Type']['rb']
-    rb_hill1  = bl_models['Hill (1)']['Wild Type']['rb']
-    rb_hill2  = bl_models['Hill (2)']['Wild Type']['rb']
-    rb_full   = bl_models['Full']['Wild Type']['rb']
+    # Get the RB functions for each distribution
+    rb_linear = bl_models['Linear']['Wild Type'][0]
+    rb_hill1  = bl_models['Hill (1)']['Wild Type'][0]
+    rb_hill2  = bl_models['Hill (2)']['Wild Type'][0]
+    rb_full   = bl_models['Full']['Wild Type'][0]
 
     # Initialize the plot
     fig, ax = plt.subplots(1, 1, figsize=(10, 8))
@@ -297,12 +274,13 @@ def plot_bl_functions(bl_models):
     ax.spines['right'].set_visible(False)
 
     # Plot all four of the models
-    rb_curves = [rb_linear, rb_hill1, rb_hill2, rb_full]
+    rb_funcs = [rb_linear, rb_hill1, rb_hill2, rb_full]
     labels = ["Linear", "Hill (1)", "Hill (2)",  "Full"]
     colors = [OKABE_ITO[i] for i in [0, 5, 6, 7]]
     
-    for rb, l, c in zip(rb_curves, labels, colors):
-        plt.plot(Z * 1000, rb, lw = 3, color = c, label = l)
+    for f, l, c in zip(rb_funcs, labels, colors):
+        vP = np.linspace(0, 500, 501)
+        plt.plot(vP, f(vP), lw = 3, color = c, label = l)
 
     # Add a legend and save the plot 
     ax.legend()
@@ -347,19 +325,20 @@ def plot_intracellular_signalling(bl_models, name):
     ax4.set_xlim((0, 500))
 
     # Plot the intracellular signalling model for all three mutants
-    datasets = [model['Wild Type'], model['BRIN-CLASP'], model['CLASP-1']]
+    functions = [model['Wild Type'], model['BRIN-CLASP'], model['CLASP-1']]
     labels = ['Wild Type', 'BRIN-CLASP', 'CLASP-1']
     colors = OKABE_ITO[:3]
 
-    for data, label, color in zip(datasets, labels, colors):
-        (vC, vRT, vRB, params) = data.values()
-        ax1.plot(Z * 1000, vRB, lw = 3, color = color, label = label)
-        ax2.plot(Z * 1000, vC, lw = 3, color = color)
-        ax3.plot(Z * 1000, vRT, lw = 3, color = color)
+    for funcs, label, color in zip(functions, labels, colors):
+        (fRB, fC, fRT) = funcs 
+        vP = np.linspace(0, 500, 501)
+        ax1.plot(vP, fRB(vP), lw = 3, color = color, label = label)
+        ax2.plot(vP,  fC(vP), lw = 3, color = color)
+        ax3.plot(vP, fRT(vP), lw = 3, color = color)
 
     # Plot the BL function on the bototm-right axis
-    (phi, psi, *params) = model['Wild Type']['params']
-    ax4.plot(Z * 1000, model['function'](*params), lw = 3, color = OKABE_ITO[0])
+    b0, *bl_params = model['best_params']
+    ax4.plot(vP * 1000, model['function'](vP, bl_params), lw = 3, color = OKABE_ITO[0])
 
     # Add a legend and save the figure
     fig.legend(bbox_to_anchor=(-0.02, 0.14, 0.967, 0.15), loc="lower right")

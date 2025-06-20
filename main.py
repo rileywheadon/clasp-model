@@ -21,19 +21,16 @@ def main():
     im.plot_bl_functions(bl_models)
     im.plot_intracellular_signalling(bl_models, "Hill (2)")
 
-    # Get the parameters from the intracellular model
-    intracellular_params = bl_models["Full"]["Wild Type"]["params"]
-
     # Run the unmodified cell column model
-    # print("\nRunning unmodified cell column model. This may take a while.")
-    # cm.fit_model(intracellular_params)
+    print("\nRunning unmodified cell column model. This may take a while.")
+    cm.fit_model()
 
     # Run the modified cell column model
-    # print("\nRunning modified cell column model. This may take a while.")
-    # cm.fit_model(intracellular_params, modified=True)
+    print("\nRunning modified cell column model. This may take a while.")
+    cm.fit_model(modified=True)
 
     # Run the modified cell column model on atrichoblast data
-    # print("\nRunning cell column model on atrichoblast data. This may take a while.")
-    # cm.fit_model(intracellular_params, cell_type="atrichoblast", modified=True)
+    print("\nRunning cell column model on atrichoblast data. This may take a while.")
+    cm.fit_model(cell_type="atrichoblast", modified=True)
 
 main()
