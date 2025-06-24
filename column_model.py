@@ -140,8 +140,6 @@ def simulate_mutants(params, fWTRB, fWTC, fBCRB, fBCC, fC1RB, fC1C, datasets, er
     rmse = wt_rmse + bc_rmse + c1_rmse
     raws = (wt_raw, bc_raw, c1_raw)
     models = (wt_model, bc_model, c1_model)
-
-    print(rmse)
     return raws, models, rmse
 
 
@@ -315,25 +313,25 @@ def plot_column_profile(raws, file_prefix):
     C1 = filter_raw_data(C1)
     
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, layout="constrained")
-    ax1.set_xlim((5, 7))
-    ax1.set_xticks([5, 6, 7])
+    ax1.set_xlim((5, 6))
+    ax1.set_xticks([5, 5.25, 5.5, 5.75, 6])
 
     # Plot the division zone for the wild type
     ax1.set_title(rf"Wild Type ({wt_size:.0f}$\mu$m)")
     ax1.scatter(WT[:, 0], WT[:, 1], color=OKABE_ITO[0], s=1, edgecolor="none")
-    ax1.set_ylim((0, 450))
+    ax1.set_ylim((0, 500))
     wt_line = ax1.hlines(wt_div, 0, MAX_TIME, colors='k', linestyles="dashed", lw=4)
 
     # Plot the division zone for the BRIN-CLASP mutant
     ax2.set_title(rf"BRIN-CLASP ({bc_size:.0f}$\mu$m)")
     ax2.scatter(BC[:, 0], BC[:, 1], color=OKABE_ITO[1], s=1, edgecolor="none")
-    ax2.set_ylim((0, 450))
+    ax2.set_ylim((0, 500))
     ax2.hlines(bc_div, 0, MAX_TIME, colors=OKABE_ITO[0], linestyles="dashed", lw=4)
 
     # Plot the division zone for the CLASP-1 mutant
     ax3.set_title(rf"CLASP-1 ({c1_size:.0f}$\mu$m)")
     ax3.scatter(C1[:, 0], C1[:, 1], color=OKABE_ITO[2], s=1, edgecolor="none")     
-    ax3.set_ylim((0, 450))
+    ax3.set_ylim((0, 500))
     ax3.hlines(c1_div, 0, MAX_TIME, colors=OKABE_ITO[0], linestyles="dashed", lw=4)
 
     # Add a legend and save the plot
@@ -377,7 +375,7 @@ def plot_division_histogram(raws, params, file_prefix):
 
     for ax, color, div, label in zip(axs, OKABE_ITO[:3], divisions, labels):
         ax.set_ylim((0, 60))
-        ax.hist(div, bins=20, range=(0,400), color=color, alpha=0.5, edgecolor="k")
+        ax.hist(div, bins=25, range=(0,500), color=color, alpha=0.5, edgecolor="k")
         ax.set_title(f"{label} Model")
 
     # Save the figure

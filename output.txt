@@ -1,0 +1,132 @@
+Generated figure 'img/trichoblast-data-unprocessed.pdf'
+Generated figure 'img/trichoblast-data-processed.pdf'
+Generated figure 'img/trichoblast-data-binned.pdf'
+Generated figure 'img/atrichoblast-data-unprocessed.pdf'
+Generated figure 'img/atrichoblast-data-processed.pdf'
+Generated figure 'img/atrichoblast-data-binned.pdf'
+
+
+Model: Linear
+RSS:   1689.0827
+AICc:  288.93
+
+Param    Estimate                   95% CI
+b0         1.2983         (1.3071, 1.3756)
+c0         0.0000         (0.0519, 0.4366)
+c1         1.5187         (0.0000, 1.7177)
+
+
+Model: Hill (1)
+RSS:   1689.0827
+AICc:  291.10
+
+Param    Estimate                   95% CI
+b0         1.2983         (1.2983, 1.3917)
+c0         0.0000         (0.1552, 0.4460)
+c1         1.5187         (0.0278, 1.3704)
+c2         0.0000         (0.0000, 0.5286)
+
+
+Model: Hill (2)
+RSS:   1382.1981
+AICc:  271.05
+
+Param    Estimate                   95% CI
+b0         1.2682         (0.1246, 1.2844)
+c0         0.0802         (0.0006, 0.1042)
+c1         5.7806         (3.8999, 8.8862)
+c2         1.1122         (0.0000, 2.0573)
+
+
+Model: Full
+RSS:   1382.1981
+AICc:  275.53
+
+Param    Estimate                   95% CI
+b0         1.2682         (1.2590, 1.2979)
+c0         0.0802         (0.0557, 0.2777)
+c1         0.0000         (0.0000, 0.0000)
+c2         0.0000         (0.0000, 0.1465)
+c3         5.7806         (1.2368, 4.7764)
+c4         1.1122         (0.0000, 0.0000)
+
+Generated figure 'img/intracellular-bl-functions.pdf'
+Generated figure 'img/intracellular-mutants.pdf'
+
+Running unmodified cell column model. This may take a while.
+Success:  False Number of function evaluations done is larger than maxfun=6000
+Params: 1.204e+01, 3.148e-01, 5.370e+00, 2.988e+01, 5.741e-01, 5.370e-10
+Error:  8.327969336213435
+Generated figure 'img/trichoblast-column-original-fit.pdf'
+Generated figure 'img/trichoblast-column-original-profile.pdf'
+Generated figure 'img/trichoblast-column-original-histogram.pdf'
+
+Wild Type Divisions (trichoblast-column-original)
+ - Mean: 186.69um
+ - Median: 167.78um
+ - Max: 440.26um
+ - Count: 535
+
+brinCLASPpro Divisions (trichoblast-column-original)
+ - Mean: 199.90um
+ - Median: 186.03um
+ - Max: 490.76um
+ - Count: 606
+
+clasp-1 Divisions (trichoblast-column-original)
+ - Mean: 115.03um
+ - Median: 102.31um
+ - Max: 349.40um
+ - Count: 189
+
+Running modified cell column model. This may take a while.
+Success:  True The volume of the hyperrectangle containing the lowest function value found is below vol_tol=1e-16
+Params: 1.253e+01, 3.272e-01, 5.123e+00, 2.988e+01, 2.537e+00, 1.957e+00
+Error:  4.924819705337458
+Generated figure 'img/trichoblast-column-modified-fit.pdf'
+Generated figure 'img/trichoblast-column-modified-profile.pdf'
+Generated figure 'img/trichoblast-column-modified-histogram.pdf'
+
+Wild Type Divisions (trichoblast-column-modified)
+ - Mean: 195.09um
+ - Median: 192.05um
+ - Max: 430.91um
+ - Count: 529
+
+brinCLASPpro Divisions (trichoblast-column-modified)
+ - Mean: 139.17um
+ - Median: 128.19um
+ - Max: 338.08um
+ - Count: 296
+
+clasp-1 Divisions (trichoblast-column-modified)
+ - Mean: 119.64um
+ - Median: 109.07um
+ - Max: 375.88um
+ - Count: 204
+
+Running cell column model on atrichoblast data. This may take a while.
+Success:  True The volume of the hyperrectangle containing the lowest function value found is below vol_tol=1e-16
+Params: 2.290e+01, 5.165e-01, 1.914e+00, 2.716e+01, 1.130e+00, 8.827e-01
+Error:  8.00744735026961
+Generated figure 'img/atrichoblast-column-modified-fit.pdf'
+Generated figure 'img/atrichoblast-column-modified-profile.pdf'
+Generated figure 'img/atrichoblast-column-modified-histogram.pdf'
+
+Wild Type Divisions (atrichoblast-column-modified)
+ - Mean: 165.94um
+ - Median: 167.03um
+ - Max: 330.16um
+ - Count: 190
+
+brinCLASPpro Divisions (atrichoblast-column-modified)
+ - Mean: 129.18um
+ - Median: 110.45um
+ - Max: 300.36um
+ - Count: 129
+
+clasp-1 Divisions (atrichoblast-column-modified)
+ - Mean: 122.26um
+ - Median: 112.50um
+ - Max: 335.95um
+ - Count: 118
