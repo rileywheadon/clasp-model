@@ -12,13 +12,18 @@ mpl.rcParams['figure.dpi'] = 360
 mpl.rcParams['font.size'] = 18
 
 # Load BES1 data and split into position and data components
-data = get_bes1_data()
-Z = data[:, 0]
-BES1 = data[:, 1]
+DATA = get_bes1_data()
+Z = DATA[:, 0]
+BES1 = DATA[:, 1]
+
+# Get the binned data and spearate the variances
+BINS = np.digitize(Z * 1000, np.linspace(50, 500, 10))
+RESCALED_BES1 = np.array([Z * 1000, BES1]).T
+VARIANCE_BES1 = get_binned_data(RESCALED_BES1, 10)[1][BINS]
 
 # Set intracellular constants KD, B1, A0, A1
 KD = 10
-B1 = 1.5
+B1 = 1
 A0 = 62 * 0.65
 A1 = 62 * 0.35
 
@@ -68,7 +73,7 @@ def bound_receptors(z, bl_function, b0, b1, params):
 def fit_model(initial_params, bl_function, data = BES1, b1 = B1):
 
     # Ensure that all parameters are non-negative
-    bounds = [(0, None)] * 6
+    bounds = [(0, 10)] * 6
 
     # Define the error function
     def RSS(params):
@@ -76,19 +81,25 @@ def fit_model(initial_params, bl_function, data = BES1, b1 = B1):
         # Compute error from BES1 data 
         b0, *bl_params = params
         predicted_bes1 = bound_receptors(Z, bl_function, b0, b1, bl_params)
-        error_bes1 = np.sum((predicted_bes1 - data) ** 2)
+        error_bes1 = np.sum(((predicted_bes1 - data) / VARIANCE_BES1) ** 2)
 
         # Compute CLASP and RT 
         predicted_clasp = b0 - (b1 * predicted_bes1)
         predicted_rt = A0 + (A1 * predicted_clasp)
 
-        # Compute error from mean CLASP of 1
+        # Compute error from mean CLASP of 1 (which implies mean RT of 62 in WT)
         error_clasp = len(data) * ((np.mean(predicted_clasp) - 1) ** 2)
 
         # Return the sum of the errors
         return error_bes1 + error_clasp
 
-    fit = minimize(RSS, initial_params, bounds=bounds, method='L-BFGS-B')
+    fit = minimize(
+        RSS,
+        initial_params,
+        bounds = bounds,
+        method='L-BFGS-B'
+    )
+
     return fit.x, fit.fun, fit.success
 
 
@@ -107,7 +118,7 @@ def AICc(rss, n, k):
 #  - bl_function is the BL function being fitted
 #  - n_bootstrap is the number of bootstrap simulations (default: 1000)
 #  - alpha is the significance level for the confidence interval (default: 0.05)
-def bootstrap_CI(initial_params, bl_function, n_bootstrap = 10, alpha = 0.05, b1 = B1):
+def bootstrap_CI(initial_params, bl_function, n_bootstrap = 5, alpha = 0.05, b1 = B1):
 
     # Fit to original data
     best_params, rss, success = fit_model(initial_params, bl_function)
@@ -117,15 +128,17 @@ def bootstrap_CI(initial_params, bl_function, n_bootstrap = 10, alpha = 0.05, b1
     residuals = BES1 - bound_receptors(Z, bl_function, b0, b1, best_bl_params)
     bootstrap_estimates = np.zeros((n_bootstrap, len(initial_params)))
 
-    for i in range(n_bootstrap):
+    i = 0
+    while i < n_bootstrap:
 
         # Resample residuals with replacement
-        resampled_residuals = np.random.choice(
-            residuals,
-            size = len(residuals),
-            replace = True
-        )
+        perm = np.random.permutation(len(BES1))
+        resampled_residuals = residuals[perm]
 
+        # Rescale residuals based on the variance
+        resampled_residuals *= (VARIANCE_BES1[perm] / VARIANCE_BES1)
+
+        # Get the bootstrapped data
         y_bootstrap = bound_receptors(
             Z,
             bl_function,
@@ -144,14 +157,15 @@ def bootstrap_CI(initial_params, bl_function, n_bootstrap = 10, alpha = 0.05, b1
 
             if success:
                 bootstrap_estimates[i, :] = p_bootstrap
+                i += 1
 
         except:
             print("An error occurred in the bootstrap.")
             continue
 
+    # print(bootstrap_estimates)
     lower = np.percentile(bootstrap_estimates, 100 * alpha / 2, axis=0)
     upper = np.percentile(bootstrap_estimates, 100 * (1 - alpha / 2), axis=0)
-
     return best_params, rss, (lower, upper), bootstrap_estimates
 
 
@@ -188,26 +202,26 @@ def intracellular_model():
     bl_models = {
         'Linear': {
             'function': bl_linear,
-            'initial_params': [1, 1, 1, 1, 1, 1],
+            'initial_params': [1.2448, 0, 1.5255, 0, 0, 0],
             'param_names': ['b0', 'c0', 'c1'],
             'k': 3
         },
         'Hill (1)': {
             'function': bl_hill1,
-            'initial_params': [1, 1, 1, 1, 1, 1],
+            'initial_params': [1.2448, 0, 1.5225, 0, 0, 0],
             'param_names': ['b0', 'c0', 'c1', 'c2'],
             'k': 4
         },
         'Hill (2)': {
             'function': bl_hill2,
-            'initial_params': [1, 1, 1, 1, 1, 1],
+            'initial_params': [1.2732, 0.0854, 5.2198, 0.4515, 0, 0],
             'param_names': ['b0', 'c0', 'c1', 'c2'],
             'k': 4
         },
         'Full': {
             'function': bl_full,
-            'initial_params': [1, 1, 1, 1, 1, 1],
-            'param_names': ['b0', 'c0', 'c1', 'c2', 'c3'],
+            'initial_params': [1.2722, 0.0797, 0, 0, 5.8896, 1.1888],
+            'param_names': ['b0', 'c0', 'c1', 'c2', 'c3', 'c4'],
             'k': 6
         },
     }
@@ -215,7 +229,7 @@ def intracellular_model():
    # Loop over the models
     for name, model in bl_models.items():
 
-        # Run bootstrap_CI to get the best fitting parameters, RSS, lower and upper
+        # Run bootstrap_CI to get the best fitting parameters, RMSE, lower and upper
         best_fit, rss, (lower, upper), samples = bootstrap_CI(
             model['initial_params'],
             model['function']
@@ -325,20 +339,20 @@ def plot_intracellular_signalling(bl_models, name):
     ax4.set_xlim((0, 500))
 
     # Plot the intracellular signalling model for all three mutants
+    vP = np.linspace(0, 500, 501)
     functions = [model['Wild Type'], model['BRIN-CLASP'], model['CLASP-1']]
     labels = ['Wild Type', 'BRIN-CLASP', 'CLASP-1']
     colors = OKABE_ITO[:3]
 
     for funcs, label, color in zip(functions, labels, colors):
         (fRB, fC, fRT) = funcs 
-        vP = np.linspace(0, 500, 501)
         ax1.plot(vP, fRB(vP), lw = 3, color = color, label = label)
         ax2.plot(vP,  fC(vP), lw = 3, color = color)
         ax3.plot(vP, fRT(vP), lw = 3, color = color)
 
     # Plot the BL function on the bototm-right axis
     b0, *bl_params = model['best_params']
-    ax4.plot(vP * 1000, model['function'](vP, bl_params), lw = 3, color = OKABE_ITO[0])
+    ax4.plot(vP, model['function'](vP / 1000, bl_params), lw = 3, color = OKABE_ITO[0])
 
     # Add a legend and save the figure
     fig.legend(bbox_to_anchor=(-0.02, 0.14, 0.967, 0.15), loc="lower right")

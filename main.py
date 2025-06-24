@@ -23,14 +23,14 @@ def main():
 
     # Run the unmodified cell column model
     print("\nRunning unmodified cell column model. This may take a while.")
-    cm.fit_model()
+    cm.fit_model(im.bl_hill2)
 
     # Run the modified cell column model
     print("\nRunning modified cell column model. This may take a while.")
-    cm.fit_model(modified=True)
+    cm.fit_model(im.bl_hill2, modified=True)
 
     # Run the modified cell column model on atrichoblast data
     print("\nRunning cell column model on atrichoblast data. This may take a while.")
-    cm.fit_model(cell_type="atrichoblast", modified=True)
+    cm.fit_model(im.bl_hill2, cell_type="atrichoblast", modified=True)
 
 main()
